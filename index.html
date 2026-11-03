@@ -1,0 +1,619 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>服饰主题互动卡</title>
+    <style>
+        /* 阿里妈妈方圆体（阿里巴巴开源免费商用字体）：页面文字统一使用，避免字体版权问题 */
+        @font-face {
+            font-family: 'Alimama FangYuanTi VF';
+            src: url('assets/AlimamaFangYuanTiVF-Thin.woff2') format('woff2');
+            font-weight: 200 700;
+            font-display: swap;
+        }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        html {
+            /* 禁止安卓微信(X5)内核按字体设置自动放大文字；X5存在“最小字号”机制，
+               英文小字号会被强制放大到约12px导致超宽截断，故改用渲染级transform缩放兜底 */
+            -webkit-text-size-adjust: none;
+            text-size-adjust: none;
+        }
+        body {
+            font-family: 'Alimama FangYuanTi VF', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+            background-color: #f0f2f5;
+            padding: 10px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            min-height: 100vh;
+            /* 防复制：禁止长按呼出菜单（微信/iOS 长按保存图片）与选中文字 */
+            -webkit-touch-callout: none;
+            -webkit-user-select: none;
+            user-select: none;
+        }
+        h1 { color: #333; margin-bottom: 15px; font-size: 22px; text-align: center; }
+        
+        /* 模式切换按钮组（3个按钮适配） */
+        .mode-selector {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 15px;
+            width: 100%;
+            max-width: 360px;
+            justify-content: center;
+        }
+        .mode-btn {
+            flex: 1;
+            padding: 10px 0;
+            border: 2px solid #4CAF50;
+            background-color: white;
+            color: #4CAF50;
+            border-radius: 25px;
+            font-size: 15px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            text-align: center;
+        }
+        .mode-btn.active {
+            background-color: #4CAF50;
+            color: white;
+            box-shadow: 0 2px 8px rgba(76, 175, 80, 0.3);
+        }
+        .mode-btn:active { transform: scale(0.95); }
+        
+        .mode-hint {
+            font-size: 14px;
+            color: #5d6b73;
+            margin-bottom: 12px;
+            text-align: center;
+            background: #e8f5e9;
+            padding: 6px 16px;
+            border-radius: 12px;
+        }
+        
+        .card-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 8px;
+            width: 100%;
+            max-width: 420px;
+        }
+        .card {
+            background-color: #ffffff;
+            border-radius: 8px;
+            box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            cursor: pointer;
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+            position: relative;
+            /* 卡片固定比例：上方图片正方形占4份 + 下方文字区占1份 → 宽:高 = 4:5 */
+            aspect-ratio: 4 / 5;
+        }
+        .card:hover { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15); }
+        .card:active { transform: scale(0.97); }
+
+        /* 图片区：正方形，高度占卡片的4份 */
+        .card-img {
+            flex: 0 0 auto;
+            aspect-ratio: 1 / 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+            padding: 4px;
+        }
+        .card-img img {
+            width: 100%;
+            height: 100%;
+            object-fit: contain;
+            display: block;
+            pointer-events: none;
+            -webkit-user-drag: none;
+            image-rendering: -webkit-optimize-contrast;
+            image-rendering: crisp-edges;
+        }
+
+        /* 文字区：占卡片高度的1份（约卡宽1/4），单行显示 */
+        .card-text {
+            flex: 1 1 0;
+            min-height: 0;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            padding: 1px 4px 2px;
+            text-align: center;
+            background: #fff;
+        }
+        /* 文字块：包住中英两行，缩放基于它的实际渲染宽度/高度测量 */
+        .card-text .block {
+            width: 100%;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            transform-origin: center center;
+        }
+        .card-text .fit {
+            width: 100%;
+            display: flex;
+            justify-content: center;
+            line-height: 1.2;
+            overflow: visible;
+        }
+        /* 互动模式（中文在前）：中文行高1.0、英文行高1.15，腾出高度让英文不至于太小 */
+        .card-text.zh-first .fit:first-child { line-height: 1.0; }
+        .card-text.zh-first .fit:last-child { line-height: 1.15; }
+        .card-text .zh, .card-text .en {
+            display: inline-block;
+            white-space: nowrap;
+            max-width: none;
+        }
+        .card-text .zh {
+            line-height: 1.2;
+            font-family: 'Alimama FangYuanTi VF', "PingFang SC", "Microsoft YaHei", sans-serif;
+            -webkit-font-smoothing: antialiased;
+            -moz-osx-font-smoothing: grayscale;
+        }
+        .card-text .en {
+            line-height: 1.2;
+            font-family: 'Alimama FangYuanTi VF', Arial, Helvetica, sans-serif;
+            letter-spacing: 0;
+        }
+        /* 单词/句子模式：英文在前，英文比中文稍大 */
+        .card-text.en-first .en {
+            font-size: 8px;
+            font-weight: 700;
+            color: #0e6e88;
+        }
+        .card-text.en-first .zh {
+            font-size: 8px;
+            color: #5d6b73;
+            margin-top: 1px;
+        }
+        /* 互动模式：中文在前，中文比英文稍大 */
+        .card-text.zh-first .zh {
+            font-size: 8px;
+            font-weight: 700;
+            color: #0e6e88;
+        }
+        .card-text.zh-first .en {
+            font-size: 8px;
+            color: #5d6b73;
+            margin-top: 1px;
+        }
+        audio { display: none; }
+        
+        footer { margin-top: 18px; font-size: 13px; color: #888; text-align: center; }
+        
+        /* 激活遮罩层样式 */
+        #activationOverlay {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.6); backdrop-filter: blur(4px);
+            display: flex; align-items: center; justify-content: center; z-index: 999;
+        }
+        .overlay-card {
+            background: white; padding: 30px 20px; border-radius: 16px;
+            text-align: center; max-width: 320px; width: 90%;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+            animation: popIn 0.3s ease;
+        }
+        @keyframes popIn { from { transform: scale(0.9); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+        .overlay-icon { font-size: 48px; margin-bottom: 10px; }
+        .overlay-title { font-size: 20px; font-weight: bold; margin-bottom: 10px; color: #333; }
+        .overlay-desc { font-size: 14px; color: #666; margin-bottom: 20px; line-height: 1.5; }
+        .activate-btn {
+            background: #4CAF50; color: white; border: none; padding: 12px 30px;
+            border-radius: 25px; font-size: 16px; font-weight: bold; cursor: pointer;
+        }
+    </style>
+</head>
+<body>
+
+    <h1>服饰主题互动卡</h1>
+
+    <div class="mode-selector">
+        <button class="mode-btn active" id="wordModeBtn">单词</button>
+        <button class="mode-btn" id="sentenceModeBtn">句子</button>
+        <button class="mode-btn" id="interactiveModeBtn">互动</button>
+    </div>
+
+    <div class="mode-hint" id="modeHint">当前模式：单词</div>
+
+    <div class="card-grid" id="flashcardContainer"></div>
+
+    <footer>点击图片听发音 · 切换模式听不同音频</footer>
+
+    <!-- 首次激活遮罩 -->
+    <div id="activationOverlay">
+        <div class="overlay-card">
+            <div class="overlay-icon">👆</div>
+            <div class="overlay-title">欢迎来到服饰主题互动卡</div>
+            <div class="overlay-desc">点击下方按钮激活音频播放<br>之后点击任意卡片即可听到发音</div>
+            <button class="activate-btn" id="activateBtn">开始学习</button>
+        </div>
+    </div>
+
+    <script>
+        const container = document.getElementById('flashcardContainer');
+        const wordBtn = document.getElementById('wordModeBtn');
+        const sentenceBtn = document.getElementById('sentenceModeBtn');
+        const interactiveBtn = document.getElementById('interactiveModeBtn');
+        const modeHint = document.getElementById('modeHint');
+        const overlay = document.getElementById('activationOverlay');
+        const activateBtn = document.getElementById('activateBtn');
+
+        let currentMode = 'word'; // 'word' | 'sentence' | 'interactive'
+        let isActivated = false;
+        const audioElements = [];
+
+        // ===== 单词模式数据（36个服饰单词，英文在前，来自内容表） =====
+        const wordVocab = [
+            { en: "hat", zh: "帽子" },
+            { en: "cap", zh: "帽子" },
+            { en: "glasses", zh: "眼镜" },
+            { en: "necklace", zh: "项链" },
+            { en: "scarf", zh: "围巾" },
+            { en: "tie", zh: "领带" },
+            { en: "T-shirt", zh: "T恤" },
+            { en: "shirt", zh: "衬衫" },
+            { en: "blouse", zh: "女式衬衫" },
+            { en: "dress", zh: "连衣裙" },
+            { en: "vest", zh: "背心" },
+            { en: "sweater", zh: "毛衣" },
+            { en: "jacket", zh: "夹克" },
+            { en: "coat", zh: "大衣" },
+            { en: "suit", zh: "西装" },
+            { en: "mittens", zh: "连指手套" },
+            { en: "gloves", zh: "手套" },
+            { en: "ring", zh: "戒指" },
+            { en: "shorts", zh: "短裤" },
+            { en: "skirt", zh: "短裙" },
+            { en: "trousers", zh: "长裤" },
+            { en: "jeans", zh: "牛仔裤" },
+            { en: "socks", zh: "袜子" },
+            { en: "stockings", zh: "长筒袜" },
+            { en: "slippers", zh: "拖鞋" },
+            { en: "sandals", zh: "凉鞋" },
+            { en: "trainers", zh: "运动鞋" },
+            { en: "boots", zh: "靴子" },
+            { en: "rain boots", zh: "雨鞋" },
+            { en: "shoes", zh: "鞋子" },
+            { en: "pajamas", zh: "睡衣" },
+            { en: "swimsuit", zh: "泳衣" },
+            { en: "raincoat", zh: "雨衣" },
+            { en: "umbrella", zh: "雨伞" },
+            { en: "watch", zh: "手表" },
+            { en: "backpack", zh: "背包" },
+        ];
+
+        // ===== 句子模式数据（36个服饰描述句，英文在前，来自内容表） =====
+        const sentenceData = [
+            { en: "This hat is purple", zh: "这顶帽子是紫色的" },
+            { en: "This cap is orange", zh: "这顶帽子是橙色的" },
+            { en: "These glasses are silver", zh: "这幅眼镜是银色的" },
+            { en: "This necklace is gold", zh: "这条项链是金色的" },
+            { en: "This scarf is purple", zh: "这条围巾是紫色的" },
+            { en: "This tie is blue", zh: "这条领带是蓝色的" },
+            { en: "This T-shirt is red", zh: "这件T恤是红色的" },
+            { en: "This shirt is white", zh: "这件衬衫是白色的" },
+            { en: "This blouse is orange", zh: "这件女式衬衫是橙色的" },
+            { en: "This dress is pink", zh: "这件连衣裙是粉色的" },
+            { en: "This vest is gray", zh: "这件背心是灰色的" },
+            { en: "This sweater is blue", zh: "这件毛衣是蓝色的" },
+            { en: "This jacket is red", zh: "这件夹克是红色的" },
+            { en: "This coat is green", zh: "这件大衣是绿色的" },
+            { en: "This suit is black", zh: "这套西装是黑色的" },
+            { en: "These mittens are yellow", zh: "这双连指手套是黄色的" },
+            { en: "These gloves are white", zh: "这双手套是白色的" },
+            { en: "This ring is gold", zh: "这个戒指是金色的" },
+            { en: "These shorts are green", zh: "这条短裤是绿色的" },
+            { en: "This skirt is pink", zh: "这条短裙是粉色的" },
+            { en: "These trousers are white", zh: "这条长裤是白色的" },
+            { en: "These jeans are blue", zh: "这条牛仔裤是蓝色的" },
+            { en: "These socks are brown", zh: "这双袜子是棕色的" },
+            { en: "These stockings are black and white", zh: "这双长筒袜是黑白相间的" },
+            { en: "These slippers are yellow", zh: "这双拖鞋是黄色的" },
+            { en: "These sandals are brown", zh: "这双凉鞋是棕色的" },
+            { en: "These trainers are gray", zh: "这双运动鞋是灰色的" },
+            { en: "These boots are black", zh: "这双靴子是黑色的" },
+            { en: "These rain boots are red", zh: "这双雨鞋是红色的" },
+            { en: "These shoes are colorful", zh: "这些鞋子色彩缤纷" },
+            { en: "These pajamas are yellow", zh: "这套睡衣是黄色的" },
+            { en: "This swimsuit is purple", zh: "这件泳衣是紫色的" },
+            { en: "This raincoat is blue", zh: "这件雨衣是蓝色的" },
+            { en: "This umbrella is colorful", zh: "这把雨伞是彩色的" },
+            { en: "This watch is silver", zh: "这只手表是银色的" },
+            { en: "This backpack is black", zh: "这个背包是黑色的" },
+        ];
+
+        // ===== 互动模式数据（36个服饰问句，中文在前，来自内容表） =====
+        const animalQuestions = [
+            { zh: "这顶帽子是什么颜色的?", en: "What color is this hat?" },
+            { zh: "这顶帽子是什么颜色的?", en: "What color is this cap?" },
+            { zh: "这幅眼镜是什么颜色的?", en: "What color are these glasses?" },
+            { zh: "这条项链是什么颜色的?", en: "What color is this necklace?" },
+            { zh: "这条围巾是什么颜色的?", en: "What color is this scarf?" },
+            { zh: "这条领带是什么颜色的?", en: "What color is this tie?" },
+            { zh: "这件T恤是什么颜色的?", en: "What color is this T-shirt?" },
+            { zh: "这件衬衫是什么颜色的?", en: "What color is this shirt?" },
+            { zh: "这件女式衬衫是什么颜色的?", en: "What color is this blouse?" },
+            { zh: "这件连衣裙是什么颜色的?", en: "What color is this dress?" },
+            { zh: "这件背心是什么颜色的?", en: "What color is this vest?" },
+            { zh: "这件毛衣是什么颜色的?", en: "What color is this sweater?" },
+            { zh: "这件夹克是什么颜色的?", en: "What color is this jacket?" },
+            { zh: "这件大衣是什么颜色的?", en: "What color is this coat?" },
+            { zh: "这套西装是什么颜色的?", en: "What color is this suit?" },
+            { zh: "这双连指手套是什么颜色的?", en: "What color are these mittens?" },
+            { zh: "这双手套是什么颜色的?", en: "What color are these gloves?" },
+            { zh: "这个戒指是什么颜色的?", en: "What color is this ring?" },
+            { zh: "这条短裤是什么颜色的?", en: "What color are these shorts?" },
+            { zh: "这条短裙是什么颜色的?", en: "What color is this skirt?" },
+            { zh: "这条长裤是什么颜色的?", en: "What color are these trousers?" },
+            { zh: "这条牛仔裤是什么颜色的?", en: "What color are these jeans?" },
+            { zh: "这双袜子是什么颜色的?", en: "What color are these socks?" },
+            { zh: "这双长筒袜是什么颜色的?", en: "What color are these stockings?" },
+            { zh: "这双拖鞋是什么颜色的?", en: "What color are these slippers?" },
+            { zh: "这双凉鞋是什么颜色的?", en: "What color are these sandals?" },
+            { zh: "这双运动鞋是什么颜色的?", en: "What color are these trainers?" },
+            { zh: "这双靴子是什么颜色的?", en: "What color are these boots?" },
+            { zh: "这双雨鞋是什么颜色的?", en: "What color are these rain boots?" },
+            { zh: "这些鞋子是什么颜色的?", en: "What color are these shoes?" },
+            { zh: "这套睡衣是什么颜色的?", en: "What color are these pajamas?" },
+            { zh: "这件泳衣是什么颜色的?", en: "What color is this swimsuit?" },
+            { zh: "这件雨衣是什么颜色的?", en: "What color is this raincoat?" },
+            { zh: "这把雨伞是什么颜色的?", en: "What color is this umbrella?" },
+            { zh: "这只手表是什么颜色的?", en: "What color is this watch?" },
+            { zh: "这个背包是什么颜色的?", en: "What color is this backpack?" },
+        ];
+
+        // 模式对应的音频后缀：单词=无，句子=a，互动=b
+        const modeSuffixMap = {
+            'word': '',
+            'sentence': 'a',
+            'interactive': 'b'
+        };
+
+        function getAudioSrc(index, mode) {
+            const suffix = modeSuffixMap[mode];
+            return suffix ? `${index}${suffix}.mp3` : `${index}.mp3`;
+        }
+
+        function getModeData(mode) {
+            if (mode === 'word') return wordVocab;
+            if (mode === 'sentence') return sentenceData;
+            return animalQuestions;
+        }
+
+        // 字号确定式计算 + 渲染级transform块级缩放兜底：
+        // 华为微信X5内核存在“最小字号”机制，小字号英文会被强制放大后超宽截断，
+        // 字号调小无效；transform是渲染级缩放，X5无法放大它。
+        // 每张卡片的英文+中文两行包在 .block 里，按实际渲染宽/高测量后整体等比缩放，
+        // 保证文字宽度永远不超过卡片（=图片）宽度，同时高度不超出文字区。
+        // 句子模式：英文尽量调大、中文调小；互动模式：中文尽量调大、英文调小但保持可读。
+        // 单词模式参数保持默认（enFactor 0.85 / zhFactor 1.05 / zhCap 12）。
+        function sizeCardTexts() {
+            const isSentence = currentMode === 'sentence';
+            const isInteractive = currentMode === 'interactive';
+            const enFactor = isSentence ? 0.52 : (isInteractive ? 0.60 : 0.85); // 英文平均字宽系数（越小字越大）
+            const zhFactor = isSentence ? 1.6 : (isInteractive ? 1.0 : 1.05);   // 中文平均字宽系数（越大字越小）
+            const zhCap = isSentence ? 6.5 : 12;                                 // 中文字号上限
+            // 行高权重：互动模式中文行高1.0、英文行高1.15，其余两行均1.2
+            const lhZh = isInteractive ? 1.0 : 1.2;
+            const lhEn = isInteractive ? 1.15 : 1.2;
+
+            document.querySelectorAll('.card-text').forEach(tw => {
+                try {
+                    const block = tw.querySelector('.block');
+                    const enEl = block.querySelector('.en');
+                    const zhEl = block.querySelector('.zh');
+                    if (!enEl || !zhEl) return;
+
+                    // 卡片真实渲染宽度（与正方形图片同宽），文字区可用宽/高
+                    const cardW = tw.parentElement.getBoundingClientRect().width;
+                    const textW = cardW - 8;      // 扣除左右内边距
+                    const stripH = cardW / 4 - 3; // 扣除上下内边距
+
+                    // 确定性起始字号（正常浏览器直接可用；X5会忽略小字号，由transform兜底）
+                    let enSize = Math.min(12, (textW - 1) / Math.max(1, enEl.textContent.length * enFactor));
+                    let zhSize = Math.min(zhCap, (textW - 1) / Math.max(1, zhEl.textContent.length * zhFactor));
+                    const totalH = lhZh * zhSize + lhEn * enSize + 1;
+                    if (totalH > stripH && stripH > 4) {
+                        const k = (stripH - 1) / totalH;
+                        enSize *= k;
+                        zhSize *= k;
+                    }
+                    enSize = Math.max(3, enSize);
+                    zhSize = Math.max(3, zhSize);
+                    enEl.style.fontSize = enSize + 'px';
+                    zhEl.style.fontSize = zhSize + 'px';
+
+                    // 测量实际渲染宽度/高度（含X5强制放大后的值），等比缩小到容器内
+                    const w = Math.max(enEl.scrollWidth, zhEl.scrollWidth);
+                    const h = block.offsetHeight;
+                    let s = 1;
+                    if (w > textW + 1) s = Math.min(s, (textW - 2) / w);
+                    if (h > stripH + 1) s = Math.min(s, (stripH - 2) / h);
+                    block.style.transform = s < 1 ? 'scale(' + s.toFixed(4) + ')' : '';
+                } catch (e) { /* 单卡异常不影响整体 */ }
+            });
+        }
+        document.addEventListener('DOMContentLoaded', sizeCardTexts);
+        window.addEventListener('resize', sizeCardTexts);
+        window.addEventListener('load', sizeCardTexts);
+        // X5 最小字号/字体加载可能在首帧后生效，延迟再校正一次
+        setTimeout(sizeCardTexts, 300);
+        setTimeout(sizeCardTexts, 800);
+        setTimeout(sizeCardTexts, 1500);
+
+        // ===== 音频播放与受限并发预加载 =====
+        // 微信 WebView（X5/WKWebView）在音频未就绪时，设置 currentTime 可能抛异常，
+        // 必须 try/catch 保护，否则后面的 play() 不会执行 → 点击图片无声。
+        function playAudio(audio) {
+            try { audio.currentTime = 0; } catch (e) { /* 文件未就绪，忽略 */ }
+            const p = audio.play();
+            if (p && typeof p.catch === 'function') {
+                p.catch(() => {
+                    // 播放失败（文件未加载完 / 加载被中断）：重新触发加载后重试一次
+                    retryPlay(audio);
+                });
+            }
+        }
+
+        function retryPlay(audio) {
+            let retried = false;
+            const doRetry = () => {
+                if (retried) return;
+                retried = true;
+                try { audio.currentTime = 0; } catch (e) { /* 忽略 */ }
+                const p = audio.play();
+                if (p && typeof p.catch === 'function') {
+                    p.catch(e => console.warn('Audio retry failed:', e));
+                }
+            };
+            if (audio.readyState >= 1) {
+                doRetry();
+            } else {
+                // 等文件就绪后自动补播；load() 会重新发起一次加载（对之前被掐断的请求有效）
+                audio.addEventListener('canplay', doRetry, { once: true });
+                try { audio.load(); } catch (e) { /* 忽略 */ }
+            }
+        }
+
+        // 受限并发的预加载队列：同时只加载 PRELOAD_CONCURRENCY 个，逐个完成，
+        // 避免36个文件一拥而上被移动端微信掐断，也让大多数卡片点按即响。
+        const PRELOAD_CONCURRENCY = 2;
+        const preloadQueue = [];
+        let activePreloads = 0;
+
+        function schedulePreload(audio) {
+            preloadQueue.push(audio);
+            pumpPreloads();
+        }
+
+        function pumpPreloads() {
+            while (activePreloads < PRELOAD_CONCURRENCY && preloadQueue.length > 0) {
+                const a = preloadQueue.shift();
+                if (a.dataset.preloaded) continue;
+                a.dataset.preloaded = '1';
+                activePreloads++;
+                let done = false;
+                const finish = () => {
+                    if (done) return;
+                    done = true;
+                    activePreloads--;
+                    pumpPreloads();
+                };
+                a.addEventListener('canplay', finish, { once: true });
+                a.addEventListener('error', finish, { once: true });
+                a.load();
+            }
+        }
+
+        function generateCards() {
+            container.innerHTML = '';
+            audioElements.length = 0;
+
+            const data = getModeData(currentMode);
+            const enFirst = currentMode !== 'interactive';
+
+            data.forEach((item, idx) => {
+                const i = idx + 1;
+                const card = document.createElement('div');
+                card.className = 'card';
+                
+                // 图片区：只放图，不带文字
+                const imgWrap = document.createElement('div');
+                imgWrap.className = 'card-img';
+                const img = document.createElement('img');
+                img.src = `${i}.jpg`;
+                img.alt = item.zh;
+                // 36张图改为懒加载：进入视口才下载，避免手机一次性拉取近10MB图片拖慢首屏
+                img.loading = 'lazy';
+                img.decoding = 'async';
+                imgWrap.appendChild(img);
+
+                // 文字区：单词/句子模式英文在前（英文稍大），互动模式中文在前（中文稍大）
+                const textWrap = document.createElement('div');
+                textWrap.className = 'card-text ' + (enFirst ? 'en-first' : 'zh-first');
+                textWrap.innerHTML = enFirst
+                    ? `<div class="block"><div class="fit"><div class="en">${item.en}</div></div><div class="fit"><div class="zh">${item.zh}</div></div></div>`
+                    : `<div class="block"><div class="fit"><div class="zh">${item.zh}</div></div><div class="fit"><div class="en">${item.en}</div></div></div>`;
+
+                // 音频：先不批量下载（preload=none），由下方受限并发的预加载队列逐个加载，
+                // 避免微信里36个文件同时请求被中断/超时，导致点击没声音
+                const audio = document.createElement('audio');
+                audio.preload = 'none';
+                audio.src = getAudioSrc(i, currentMode);
+                audio.id = `audio-${i}`;
+                audioElements.push(audio);
+                // 加载失败时打日志（手机上看不到控制台，但便于排查问题卡片）
+                audio.addEventListener('error', () => {
+                    console.warn('Audio load error:', audio.src);
+                });
+                schedulePreload(audio);
+
+                card.addEventListener('click', () => {
+                    if (!isActivated) {
+                        overlay.style.display = 'flex';
+                        return;
+                    }
+                    playAudio(audio);
+                });
+
+                card.appendChild(imgWrap);
+                card.appendChild(textWrap);
+                card.appendChild(audio);
+                container.appendChild(card);
+            });
+
+            // 按卡片宽度与文本长度确定性计算字号，保证单行完整显示
+            sizeCardTexts();
+        }
+
+        function setMode(mode) {
+            currentMode = mode;
+            
+            // 更新按钮高亮
+            wordBtn.classList.toggle('active', mode === 'word');
+            sentenceBtn.classList.toggle('active', mode === 'sentence');
+            interactiveBtn.classList.toggle('active', mode === 'interactive');
+
+            // 更新提示文字
+            if (mode === 'word') modeHint.textContent = '当前模式：单词';
+            else if (mode === 'sentence') modeHint.textContent = '当前模式：句子';
+            else modeHint.textContent = '当前模式：互动';
+
+            // 重建卡片：文字内容与音频随模式切换
+            generateCards();
+        }
+
+        function activatePage() {
+            isActivated = true;
+            overlay.style.display = 'none';
+            // 播放极短静音，绕过微信限制
+            const silentAudio = new Audio('data:audio/wav;base64,UklGRjIAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQoAAACAgICAAIAAgACA');
+            silentAudio.play().then(() => silentAudio.pause()).catch(() => {});
+        }
+
+        // ===== 防复制：禁用右键菜单、长按保存、选中与拖拽 =====
+        document.addEventListener('contextmenu', function (e) { e.preventDefault(); });
+        document.addEventListener('selectstart', function (e) { e.preventDefault(); });
+        document.addEventListener('dragstart', function (e) { e.preventDefault(); });
+        document.addEventListener('copy', function (e) { e.preventDefault(); });
+
+        wordBtn.addEventListener('click', () => setMode('word'));
+        sentenceBtn.addEventListener('click', () => setMode('sentence'));
+        interactiveBtn.addEventListener('click', () => setMode('interactive'));
+        activateBtn.addEventListener('click', activatePage);
+
+        // 初始化
+        generateCards();
+    </script>
+</body>
+</html>
